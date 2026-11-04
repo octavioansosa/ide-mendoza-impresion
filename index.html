@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ficha de capa · IDE Mendoza</title>
+<style>
+  /* =====================================================================
+     CONFIGURACIÓN: pegá acá la URL REST de la capa (termina en /0, /1, etc.)
+     Se edita en el <script> de abajo (const LAYER_URL).
+     ===================================================================== */
+  :root {
+    --azul: #0E1E5B;
+    --azul-claro: #C9D3F0;
+    --gris: #5F6B7A;
+    --texto: #1F2A44;
+    --linea: #E3E7EF;
+    --fondo: #F3F5F9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--fondo);
+    color: var(--texto);
+    font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .toolbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+    padding: 10px 16px;
+    background: #FFFFFF;
+    border-bottom: 1px solid var(--linea);
+  }
+  .toolbar button {
+    padding: 9px 16px;
+    border: 0; border-radius: 6px;
+    background: var(--azul); color: #FFF;
+    font-weight: bold; font-size: 13px; cursor: pointer;
+  }
+  .toolbar button.sec { background: #FFF; color: var(--azul); border: 1px solid var(--azul); }
+
+  .hoja {
+    width: 210mm; max-width: 100%;
+    min-height: 297mm;
+    margin: 20px auto;
+    padding: 16mm 15mm;
+    background: #FFF;
+    box-shadow: 0 2px 12px rgba(14,30,91,.12);
+  }
+  .encabezado {
+    background: var(--azul); color: #FFF;
+    padding: 14px 16px; border-radius: 8px;
+  }
+  .encabezado .marca { font-size: 11px; letter-spacing: .08em; color: var(--azul-claro); text-transform: uppercase; }
+  .encabezado h1 { margin: 4px 0 0; font-size: 21px; }
+  .encabezado .ruta { margin-top: 4px; font-size: 12px; color: var(--azul-claro); }
+  .ambito { margin: 12px 0 0; color: var(--azul); font-weight: bold; }
+
+  h2 {
+    margin: 18px 0 8px;
+    padding-bottom: 3px;
+    color: var(--azul); font-size: 13px; letter-spacing: .04em;
+    border-bottom: 2px solid var(--azul);
+    break-after: avoid;
+  }
+  p { margin: 0; }
+  .desc { white-space: pre-line; text-align: justify; }
+  .claves { color: var(--gris); }
+
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 6px 8px 6px 0; vertical-align: top; border-bottom: 1px solid var(--linea); }
+  td.k { width: 34%; color: var(--gris); white-space: nowrap; }
+  tr { break-inside: avoid; }
+
+  .badge { padding: 2px 9px; border-radius: 10px; font-weight: bold; background: #DDF2E3; color: #1E6B3A; }
+  .badge.obsoleto { background: #FDECEC; color: #8A1C1C; }
+
+  .descargas td.k { white-space: normal; color: var(--texto); font-weight: bold; }
+  .descargas a { color: var(--azul); word-break: break-all; font-size: 11px; }
+
+  .pie {
+    margin-top: 22px; padding-top: 8px;
+    border-top: 1px solid var(--linea);
+    display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    color: var(--gris); font-size: 10.5px; font-style: italic;
+  }
+  .estado-msg { max-width: 600px; margin: 60px auto; padding: 0 16px; text-align: center; color: var(--gris); }
+  .estado-msg.error { color: #8A1C1C; }
+
+  /* ---------- Impresión ---------- */
+  @page { size: A4; margin: 12mm; }
+  @media print {
+    body { background: #FFF; }
+    .toolbar { display: none; }
+    .hoja { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    a { text-decoration: none; }
+  }
+  @media (max-width: 600px) {
+    .hoja { margin: 0; padding: 16px; min-height: 0; }
+    td.k { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar" id="toolbar" hidden>
+  <button onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
+  <button class="sec" onclick="window.close()">Cerrar</button>
+</div>
+
+<div id="app"><p class="estado-msg">Cargando ficha de la capa…</p></div>
+
+<script>
+// =====================================================================
+// CONFIGURACIÓN
+// URL REST de la capa del catálogo (FeatureServer/<índice>).
+// También se puede pasar por URL: ?url=<capa>&oid=<objectid>
+// =====================================================================
+const LAYER_URL = 'https://ide.mendoza.gov.ar/server/rest/services/Hosted/service_8cd7e51ca0d442dd9c7e49cc71f65537_form/FeatureServer/0';
+
+// Campos de link → etiqueta (mismo orden que el popup)
+const DESCARGAS = [
+  ['link_shapefile',          'Shapefile'],
+  ['link_csv',                'CSV'],
+  ['link_kml',                'KML'],
+  ['link_excel',              'Excel'],
+  ['link_gdb',                'Geodatabase de archivos'],
+  ['link_geojson',            'GeoJSON'],
+  ['link_conjunto_entidades', 'Conjunto de entidades'],
+  ['link_geopackage',         'GeoPackage'],
+  ['link_pdf',                'PDF/JPEG']
+];
+
+// ---------------------------------------------------------------------
+const params = new URLSearchParams(location.search);
+const layerUrl = (params.get('url') || LAYER_URL).replace(/\/+$/, '');
+const oid = params.get('oid');
+const app = document.getElementById('app');
+
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const vacio = (v) => v === null || v === undefined || String(v).trim() === '';
+
+function mensaje(txt, error) {
+  app.innerHTML = '<p class="estado-msg' + (error ? ' error' : '') + '">' + txt + '</p>';
+}
+
+async function getJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  if (j.error) throw new Error(j.error.message || 'Error del servicio');
+  return j;
+}
+
+// Devuelve el nombre del dominio (equivalente a DomainName en Arcade)
+function dominio(campos, nombre, valor) {
+  const f = campos.find(c => c.name.toLowerCase() === nombre.toLowerCase());
+  const cv = f && f.domain && f.domain.codedValues;
+  if (!cv) return valor;
+  const m = cv.find(x => String(x.code) === String(valor));
+  return m ? m.name : valor;
+}
+
+function fecha(v) {
+  if (vacio(v)) return '';
+  const d = new Date(typeof v === 'number' ? v : Date.parse(v));
+  if (isNaN(d)) return esc(v);
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function fila(k, v) {
+  return '<tr><td class="k">' + esc(k) + '</td><td>' + v + '</td></tr>';
+}
+
+async function iniciar() {
+  if (!oid) { mensaje('Falta el parámetro <b>oid</b> en la URL.', true); return; }
+  if (layerUrl.includes('XXXXXXXX')) { mensaje('Configurá <b>LAYER_URL</b> en index.html.', true); return; }
+
+  try {
+    const [meta, q] = await Promise.all([
+      getJSON(layerUrl + '?f=json'),
+      getJSON(layerUrl + '/query?f=json&outFields=*&returnGeometry=false&objectIds=' + encodeURIComponent(oid))
+    ]);
+    if (!q.features || !q.features.length) { mensaje('No se encontró el registro ' + esc(oid) + '.', true); return; }
+
+    // Atributos con nombres en minúscula para no depender de mayúsculas
+    const a = {};
+    Object.entries(q.features[0].attributes).forEach(([k, v]) => { a[k.toLowerCase()] = v; });
+    const campos = meta.fields || [];
+
+    render(a, campos);
+  } catch (e) {
+    mensaje('No se pudo cargar la capa: ' + esc(e.message), true);
+  }
+}
+
+function render(a, campos) {
+  const nombre = vacio(a.nombre) ? 'Capa sin nombre' : a.nombre;
+  const cat = vacio(a.categoria) ? '' : a.categoria;
+  const sub = vacio(a.sub_categoria) ? '' : a.sub_categoria;
+
+  let ambito = vacio(a.escala) ? '' : dominio(campos, 'escala', a.escala);
+  if (!vacio(a.departamento)) ambito += ' · ' + a.departamento;
+  if (!vacio(a.zona_especifica)) ambito += ' · ' + a.zona_especifica;
+  ambito = ambito.replace(/^ · /, '');
+
+  document.title = nombre + ' · IDE Mendoza';
+
+  let h = '<div class="hoja">';
+
+  // Encabezado
+  h += '<div class="encabezado"><div class="marca">Infraestructura de Datos Espaciales de Mendoza</div>';
+  h += '<h1>' + esc(nombre) + '</h1>';
+  if (cat) {
+    let ruta = cat;
+    if (sub && sub !== cat) ruta += '  ›  ' + sub;
+    h += '<div class="ruta">' + esc(ruta) + '</div>';
+  }
+  h += '</div>';
+  if (ambito) h += '<p class="ambito">📐 ' + esc(ambito) + '</p>';
+
+  // Descripción
+  if (!vacio(a.descripcion)) {
+    h += '<h2>DESCRIPCIÓN</h2><p class="desc">' + esc(a.descripcion) + '</p>';
+  }
+
+  // Palabras clave
+  if (!vacio(a.palabras_claves)) {
+    const pc = String(a.palabras_claves).split(/[;,]/).map(s => s.trim()).filter(Boolean).join('  ·  ');
+    if (pc) h += '<h2>PALABRAS CLAVE</h2><p class="claves">' + esc(pc) + '</p>';
+  }
+
+  // Metadatos
+  const disponibles = DESCARGAS.filter(([c]) => !vacio(a[c]));
+  let m = '';
+  if (!vacio(a.estado)) {
+    const cls = a.estado === 'Obsoleto' ? 'badge obsoleto' : 'badge';
+    m += fila('Estado', '<span class="' + cls + '">' + esc(a.estado) + '</span>');
+  }
+  if (!vacio(a.fecha)) m += fila('Fecha de carga', fecha(a.fecha));
+  if (!vacio(a.periodo_actualizacion)) m += fila('Actualización', esc(a.periodo_actualizacion));
+  if (cat) m += fila('Categoría', esc(cat));
+  if (sub) m += fila('Subcategoría', esc(sub));
+  if (ambito) m += fila('Escala territorial', esc(ambito));
+  m += fila('Formatos disponibles', String(disponibles.length));
+  if (!vacio(a.contact_nombre_apellido)) m += fila('Contacto', esc(a.contact_nombre_apellido));
+  if (!vacio(a.contacto_email)) m += fila('Email', '<a href="mailto:' + esc(a.contacto_email) + '">' + esc(a.contacto_email) + '</a>');
+  if (!vacio(a.contacto_tel)) m += fila('Teléfono', esc(a.contacto_tel));
+  h += '<h2>METADATOS</h2><table>' + m + '</table>';
+
+  // Descargas (con la URL visible, para que quede en el papel/PDF)
+  h += '<h2>DESCARGAS</h2>';
+  if (disponibles.length) {
+    h += '<table class="descargas">' + disponibles.map(([c, etq]) =>
+      fila(etq, '<a href="' + esc(a[c]) + '" target="_blank">' + esc(a[c]) + '</a>')
+    ).join('') + '</table>';
+  } else {
+    h += '<p class="claves"><i>Esta capa todavía no tiene links de descarga cargados.</i></p>';
+  }
+
+  // Pie
+  const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  h += '<div class="pie"><span>Infraestructura de Datos Espaciales de Mendoza · OpenData</span><span>Ficha generada el ' + hoy + '</span></div>';
+  h += '</div>';
+
+  app.innerHTML = h;
+  document.getElementById('toolbar').hidden = false;
+  if (params.get('print') === '1') setTimeout(() => window.print(), 400);
+}
+
+iniciar();
+</script>
+</body>
+</html>
