@@ -132,13 +132,22 @@ const DESCARGAS = [
   ['link_geojson',            'GeoJSON'],
   ['link_conjunto_entidades', 'Conjunto de entidades'],
   ['link_geopackage',         'GeoPackage'],
-  ['link_pdf',                'PDF/JPEG']
+  ['link_pdf',                'PDF/JPEG'],
+  ['link_wms',                'Servicio WMS'],
+  ['link_wfs',                'Servicio WFS']
 ];
 
 // ---------------------------------------------------------------------
 const params = new URLSearchParams(location.search);
 const layerUrl = (params.get('url') || LAYER_URL).replace(/\/+$/, '');
-const oid = params.get('oid');
+
+// Acepta ?oid=, ?objectid= u ?ObjectID= (sin importar mayúsculas)
+let oid = null;
+params.forEach((v, k) => {
+  const key = k.toLowerCase();
+  if (!oid && (key === 'oid' || key === 'objectid')) oid = v;
+});
+
 const app = document.getElementById('app');
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -241,8 +250,11 @@ function render(a, campos) {
     const cls = a.estado === 'Obsoleto' ? 'badge obsoleto' : 'badge';
     m += fila('Estado', '<span class="' + cls + '">' + esc(a.estado) + '</span>');
   }
-  if (!vacio(a.fecha)) m += fila('Fecha de carga', fecha(a.fecha));
+  if (!vacio(a.fecha)) m += fila('Fecha de publicación', fecha(a.fecha));
+  m += fila('Fecha de cobertura', vacio(a.periodo_cobertura_date) ? '—' : fecha(a.periodo_cobertura_date));
+  m += fila('Período de cobertura', vacio(a.periodo_cobertura) ? '—' : esc(a.periodo_cobertura));
   if (!vacio(a.periodo_actualizacion)) m += fila('Actualización', esc(a.periodo_actualizacion));
+  if (!vacio(a.fuente)) m += fila('Fuente', esc(a.fuente));
   if (cat) m += fila('Categoría', esc(cat));
   if (sub) m += fila('Subcategoría', esc(sub));
   if (ambito) m += fila('Escala territorial', esc(ambito));
